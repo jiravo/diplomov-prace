@@ -22,3 +22,4 @@ df.to_csv("test_data.csv", index=False)
 
 print("Data byla úspěšně vygenerována a uložena jako test_data.csv")
 print(df.head())
+print("Hello, world!")
