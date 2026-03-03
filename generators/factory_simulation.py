@@ -13,19 +13,31 @@ def initialize_machine_states(machines):
 
     for _, row in machines.iterrows():
 
-        rng = np.random.default_rng(abs(hash(row["machine_id"])) % (2**32))
+        rng = np.random.default_rng()
+
+        age_years = rng.uniform(1, 12)
+
+        age_factor = 1 + (age_years / 15)
+
+        reliability_factor = rng.uniform(0.7, 1.2) * age_factor
 
         states.append(
             {
                 "machine_id": row["machine_id"],
                 "line_id": row["line_id"],
-                "rng": rng,
                 "health": 1.0,
-                "base_degradation": rng.uniform(0.00015, 0.00035),
-                "failure_threshold": rng.uniform(0.45, 0.6),
+                # chronická spolehlivost
+                "reliability_factor": reliability_factor,
+                # čím vyšší factor → rychlejší degradace
+                "base_degradation": rng.uniform(0.00018, 0.00035) * reliability_factor,
+                # horší stroje mají vyšší threshold
+                "failure_threshold": rng.uniform(0.45, 0.6) * reliability_factor,
                 "is_running": True,
                 "hours_since_maintenance": 0,
                 "failure_remaining_hours": 0,
+                "cooldown_remaining_hours": 0,
+                "age_years": age_years,
+                "rng": rng,
             }
         )
 
@@ -42,6 +54,10 @@ def simulate_hour(state):
     # -----------------------------
     # MACHINE FAILURE ACTIVE
     # -----------------------------
+    # cooldown odečítání
+    if state["cooldown_remaining_hours"] > 0:
+        state["cooldown_remaining_hours"] -= 1
+
     if state["failure_remaining_hours"] > 0:
 
         state["is_running"] = False
@@ -55,6 +71,8 @@ def simulate_hour(state):
             state["health"] = min(1.0, state["health"] + recovery)
 
             state["hours_since_maintenance"] = 0
+
+            state["cooldown_remaining_hours"] = state["rng"].integers(12, 48)
 
     else:
         state["is_running"] = True
@@ -134,26 +152,60 @@ def generate_sensor_values(state, timestamp):
 # =====================================================
 
 
-def check_failure(state):
+def check_failure(state, sensors):
 
+    # ==========================================
+    # 1️⃣ Pokud je zařízení už v poruše,
+    #    nová porucha nesmí vzniknout
+    # ==========================================
+    # během cooldown nelze vzniknout porucha
+    if state["cooldown_remaining_hours"] > 0:
+        return False, 0, None
+
+    if state["failure_remaining_hours"] > 0:
+        return False, 0, None
+
+    # ==========================================
+    # 2️⃣ Kontrola threshold
+    # ==========================================
     if state["health"] < state["failure_threshold"]:
 
-        # pravděpodobnost roste s degradací
-        probability = (1 - state["health"]) * 0.15
+        probability = (1 - state["health"]) * 0.18
 
         if state["rng"].random() < probability:
 
             duration = state["rng"].integers(2, 12)
 
+            # ==========================================
+            # 3️⃣ Výpočet skóre podle senzorů
+            # ==========================================
+            temp_score = sensors["temperature"] / 100
+            vib_score = sensors["vibration"] / 8
+            press_score = sensors["pressure"] / 9
+
+            scores = {
+                "mechanical": vib_score,
+                "overheating": temp_score,
+                "pressure": press_score,
+                "electrical": 0.2,  # baseline
+            }
+
+            total = sum(scores.values())
+            probabilities = [v / total for v in scores.values()]
+
+            failure_type = state["rng"].choice(list(scores.keys()), p=probabilities)
+
+            # ==========================================
+            # 4️⃣ Aktivace poruchy
+            # ==========================================
             state["failure_remaining_hours"] = duration
 
-            # porucha zhorší stav,
-            # ale zařízení nezničí
+            # porucha zhorší health
             state["health"] *= state["rng"].uniform(0.7, 0.85)
 
-            return True, duration
+            return True, duration, failure_type
 
-    return False, 0
+    return False, 0, None
 
 
 # =====================================================
@@ -177,9 +229,9 @@ def run_factory_simulation(machines, time_df):
 
             state = simulate_hour(state)
 
-            failure_started, duration = check_failure(state)
-
             sensors = generate_sensor_values(state, timestamp)
+
+            failure_started, duration, failure_type = check_failure(state, sensors)
 
             # ---------------- SENSOR DATA ----------------
             sensor_rows.append(
@@ -211,6 +263,7 @@ def run_factory_simulation(machines, time_df):
                         "line_id": state["line_id"],
                         "failure_time": timestamp,
                         "downtime_hours": duration,
+                        "failure_type": failure_type,
                     }
                 )
 

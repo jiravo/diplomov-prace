@@ -75,3 +75,6 @@ plt.show()
 
 
 print("#############################")
+print(failures["failure_type"].value_counts())
+print(failures["failure_type"].value_counts(normalize=True))
+print(failures.groupby("machine_id").size().sort_values(ascending=False))
