@@ -1,0 +1,5 @@
+machine_type_id,machine_type_name,description
+1,Řezací stanice,Automatizovaná stanice pro dělení materiálu
+2,Lis,Hydraulický lis pro tváření materiálu
+3,Montážní stanice,Poloautomatická montážní operace
+4,Testovací stanice,Kontrola kvality a funkční testování

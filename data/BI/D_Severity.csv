@@ -1,0 +1,4 @@
+severity_id,severity_level,severity_description
+1,Nízká,Krátkodobá porucha bez významného dopadu na výrobu
+2,Střední,Porucha vyžadující zásah údržby a částečné omezení výroby
+3,Vysoká,Kritická porucha s výrazným dopadem na výrobu

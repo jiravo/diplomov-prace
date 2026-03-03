@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 
+# SCRIPT GENERUJE REÁLNÉ CHOVÁNÍ FIRMY, ZE KTERÉHO VYCHÁZEJÍ HLAVNÍ TABULKY: sensor_data, failures, maintenance
 
 # =====================================================
 # INITIAL MACHINE STATES
@@ -15,28 +16,41 @@ def initialize_machine_states(machines):
 
         rng = np.random.default_rng()
 
-        age_years = rng.uniform(1, 12)
+        age_years = row["machine_age_years"]
 
-        age_factor = 1 + (age_years / 15)
+        # 🔹 stáří zvyšuje degradaci
+        age_factor = 1 + (age_years / 10)
 
-        reliability_factor = rng.uniform(0.7, 1.2) * age_factor
+        # základ degradace podle typu stroje
+        if row["machine_type_id"] == 1:  # Řezací
+            base = 0.00020
+        elif row["machine_type_id"] == 2:  # Lis
+            base = 0.00023
+        elif row["machine_type_id"] == 3:  # Montáž
+            base = 0.00018
+        else:  # Test
+            base = 0.00016
+
+        base_degradation = base * age_factor
+
+        # starší stroje mají vyšší threshold
+        failure_threshold = 0.45 + (age_years / 50)
 
         states.append(
             {
                 "machine_id": row["machine_id"],
                 "line_id": row["line_id"],
+                "machine_type_id": row["machine_type_id"],
                 "health": 1.0,
-                # chronická spolehlivost
-                "reliability_factor": reliability_factor,
-                # čím vyšší factor → rychlejší degradace
-                "base_degradation": rng.uniform(0.00018, 0.00035) * reliability_factor,
-                # horší stroje mají vyšší threshold
-                "failure_threshold": rng.uniform(0.45, 0.6) * reliability_factor,
+                "base_degradation": base_degradation,
+                "failure_threshold": failure_threshold,
                 "is_running": True,
                 "hours_since_maintenance": 0,
                 "failure_remaining_hours": 0,
                 "cooldown_remaining_hours": 0,
-                "age_years": age_years,
+                "initial_age_hours": row["machine_age_years"] * 365 * 24,
+                "simulated_hours": 0,
+                "max_units_per_hour": row["max_units_per_hour"],
                 "rng": rng,
             }
         )
@@ -87,6 +101,8 @@ def simulate_hour(state):
 
         state["hours_since_maintenance"] += 1
 
+    state["simulated_hours"] += 1
+
     return state
 
 
@@ -131,11 +147,38 @@ def generate_sensor_values(state, timestamp):
     load = np.clip(load, 0, 100)
 
     if state["is_running"]:
-        produced_units = int(rng.normal(80 * state["health"], 5))
+        performance_factor = rng.normal(0.92, 0.03)  # běžná odchylka výkonu
+        performance_factor = np.clip(performance_factor, 0.75, 1.05)
+
+        produced_units = int(state["max_units_per_hour"] * performance_factor)
     else:
         produced_units = 0
 
     produced_units = max(produced_units, 0)
+
+    planned_production = state["max_units_per_hour"]
+
+    # -----------------------
+    # DEFECT RATE
+    # -----------------------
+
+    # základní scrap daného stroje (každý stroj má jiný baseline)
+    base_defect_rate = rng.uniform(0.005, 0.02)  # 0.5 % – 2 %
+
+    # degradace výrazně zvyšuje zmetkovitost
+    degradation_effect = (1 - health) * 0.12
+
+    # provozní náhodnost
+    random_noise = rng.normal(0, 0.005)
+
+    defect_rate = base_defect_rate + degradation_effect + random_noise
+
+    # hranice 0–0.15 (0–15 %)
+    defect_rate = np.clip(defect_rate, 0, 0.15)
+
+    defective_units = int(produced_units * defect_rate)
+
+    ok_units = produced_units - defective_units
 
     return {
         "temperature": temperature,
@@ -144,6 +187,9 @@ def generate_sensor_values(state, timestamp):
         "load": load,
         "ambient_temperature": ambient_temperature,
         "produced_units": produced_units,
+        "planned_production": planned_production,
+        "defective_units": defective_units,
+        "ok_units": ok_units,
     }
 
 
@@ -177,18 +223,46 @@ def check_failure(state, sensors):
             duration = state["rng"].integers(2, 12)
 
             # ==========================================
-            # 3️⃣ Výpočet skóre podle senzorů
+            # 3️⃣ Výpočet skóre podle typu stroje
             # ==========================================
+
             temp_score = sensors["temperature"] / 100
             vib_score = sensors["vibration"] / 8
             press_score = sensors["pressure"] / 9
 
-            scores = {
-                "mechanical": vib_score,
-                "overheating": temp_score,
-                "pressure": press_score,
-                "electrical": 0.2,  # baseline
-            }
+            machine_type = state["machine_type_id"]
+
+            if machine_type == 1:  # Řezací
+                scores = {
+                    "mechanical": vib_score * 1.2,
+                    "overheating": temp_score * 1.1,
+                    "pressure": press_score * 0.8,
+                    "electrical": 0.2,
+                }
+
+            elif machine_type == 2:  # Lis
+                scores = {
+                    "mechanical": vib_score * 1.5,
+                    "overheating": temp_score * 0.9,
+                    "pressure": press_score * 1.1,
+                    "electrical": 0.2,
+                }
+
+            elif machine_type == 3:  # Montáž
+                scores = {
+                    "mechanical": vib_score * 1.1,
+                    "overheating": temp_score * 0.8,
+                    "pressure": press_score * 0.7,
+                    "electrical": 0.4,
+                }
+
+            else:  # Testovací
+                scores = {
+                    "mechanical": vib_score * 0.7,
+                    "overheating": temp_score * 0.8,
+                    "pressure": press_score * 0.6,
+                    "electrical": 0.8,
+                }
 
             total = sum(scores.values())
             probabilities = [v / total for v in scores.values()]
@@ -225,47 +299,85 @@ def run_factory_simulation(machines, time_df):
         timestamp = time_row["timestamp"]
         shift_id = time_row["shift_id"]
 
-        for state in states:
+        # ============================
+        # ZPRACUJEME KAŽDOU LINKU ZVLÁŠŤ
+        # ============================
+        for line_id in set(s["line_id"] for s in states):
 
-            state = simulate_hour(state)
+            # vezmeme stroje jedné linky
+            line_states = [s for s in states if s["line_id"] == line_id]
 
-            sensors = generate_sensor_values(state, timestamp)
+            # seřadíme podle pořadí stanice (machine_type_id 1–4)
+            line_states = sorted(line_states, key=lambda x: x["machine_type_id"])
 
-            failure_started, duration, failure_type = check_failure(state, sensors)
+            line_blocked = False
 
-            # ---------------- SENSOR DATA ----------------
-            sensor_rows.append(
-                {
-                    "timestamp": timestamp,
-                    "machine_id": state["machine_id"],
-                    "line_id": state["line_id"],
-                    "shift_id": shift_id,
-                    "is_running": int(state["is_running"]),
-                    "temperature": sensors["temperature"],
-                    "vibration": sensors["vibration"],
-                    "pressure": sensors["pressure"],
-                    "load": sensors["load"],
-                    "ambient_temperature": sensors["ambient_temperature"],
-                    "produced_units": sensors["produced_units"],
-                    "operating_hours_since_maintenance": state[
-                        "hours_since_maintenance"
-                    ],
-                    "health_index": state["health"],
-                }
-            )
+            for i, state in enumerate(line_states):
 
-            # ---------------- FAILURE LOG ----------------
-            if failure_started:
+                # simulate hour přímo nad objektem
+                simulate_hour(state)
 
-                failures.append(
+                if line_blocked:
+                    state["is_running"] = False
+
+                    sensors = generate_sensor_values(state, timestamp)
+
+                    sensors["produced_units"] = 0
+                    sensors["defective_units"] = 0
+                    sensors["ok_units"] = 0
+
+                    failure_started = False
+                    duration = 0
+                    failure_type = None
+
+                else:
+                    sensors = generate_sensor_values(state, timestamp)
+
+                    failure_started, duration, failure_type = check_failure(
+                        state, sensors
+                    )
+
+                    if state["failure_remaining_hours"] > 0:
+                        line_blocked = True
+
+                # ---------------- SENSOR DATA ----------------
+                sensor_rows.append(
                     {
+                        "timestamp": timestamp,
                         "machine_id": state["machine_id"],
                         "line_id": state["line_id"],
-                        "failure_time": timestamp,
-                        "downtime_hours": duration,
-                        "failure_type": failure_type,
+                        "shift_id": shift_id,
+                        "is_running": int(state["is_running"]),
+                        "temperature": round(sensors["temperature"], 1),
+                        "vibration": round(sensors["vibration"], 2),
+                        "pressure": round(sensors["pressure"], 2),
+                        "load": round(sensors["load"], 2),
+                        "ambient_temperature": round(sensors["ambient_temperature"], 1),
+                        "produced_units": sensors["produced_units"],
+                        "defective_units": sensors["defective_units"],
+                        "ok_units": sensors["ok_units"],
+                        "planned_production": sensors["planned_production"],
+                        "operating_hours_since_maintenance": state[
+                            "hours_since_maintenance"
+                        ],
+                        "machine_age_hours": int(
+                            state["initial_age_hours"] + state["simulated_hours"]
+                        ),
+                        "health_index": round(state["health"], 4),
                     }
                 )
+
+                # ---------------- FAILURE DATA ----------------
+                if failure_started:
+                    failures.append(
+                        {
+                            "machine_id": state["machine_id"],
+                            "line_id": state["line_id"],
+                            "failure_time": timestamp,
+                            "downtime_hours": duration,
+                            "failure_type": failure_type,
+                        }
+                    )
 
     sensor_df = pd.DataFrame(sensor_rows)
     failures_df = pd.DataFrame(failures)

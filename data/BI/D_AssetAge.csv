@@ -1,0 +1,5 @@
+asset_age_id,age_bucket_name,age_min_years,age_max_years
+1,0–2 roky (Nové),0,2
+2,2–4 roky (Stabilní),2,4
+3,4–6 let (Stárnoucí),4,6
+4,6+ let (Rizikové),6,999

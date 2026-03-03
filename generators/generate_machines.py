@@ -1,6 +1,8 @@
 import pandas as pd
 from config import *
 
+# SCRIPT GENERUJE ZAŘÍZENÍ: D_Machines
+
 
 def generate_machines():
 

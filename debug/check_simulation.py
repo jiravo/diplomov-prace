@@ -7,7 +7,7 @@ df = pd.read_csv("data/Source/sensor_data.csv")
 df["timestamp"] = pd.to_datetime(df["timestamp"])
 
 # vyber jeden stroj
-df_machine = df[df["machine_id"] == "M1"]
+df_machine = df[df["machine_id"] == 1]
 
 # menší časové okno (např. 10 dní)
 df_machine = df_machine.iloc[:240]
@@ -63,12 +63,12 @@ print(df[["health_index", "temperature", "vibration", "pressure"]].corr())
 
 print("#############################")
 
-m = df[df.machine_id == "M1"]
+m = df[df.machine_id == 1]
 
 plt.plot(m["health_index"])
 plt.scatter(
-    failures[failures.machine_id == "M1"]["failure_time"],
-    [0.4] * len(failures[failures.machine_id == "M1"]),
+    failures[failures.machine_id == 1]["failure_time"],
+    [0.4] * len(failures[failures.machine_id == 1]),
     color="red",
 )
 plt.show()
@@ -78,3 +78,52 @@ print("#############################")
 print(failures["failure_type"].value_counts())
 print(failures["failure_type"].value_counts(normalize=True))
 print(failures.groupby("machine_id").size().sort_values(ascending=False))
+
+machines = pd.read_csv("data/BI/D_Machine.csv")
+failures = pd.read_csv("data/Source/failures.csv")
+
+# spojení přes machine_id
+merged = failures.merge(
+    machines[["machine_id", "machine_type_id"]], on="machine_id", how="left"
+)
+
+print(merged.groupby(["machine_type_id", "failure_type"]).size())
+
+df_line = df[(df["line_id"] == 1) & (df["timestamp"] == "2024-10-24 11:00:00")]
+
+print(df_line[["machine_id", "is_running", "produced_units"]])
+
+print("###########################################")
+
+import pandas as pd
+
+df = pd.read_csv("data/Source/sensor_data.csv")
+failures = pd.read_csv("data/Source/failures.csv")
+
+df["timestamp"] = pd.to_datetime(df["timestamp"])
+failures["failure_time"] = pd.to_datetime(failures["failure_time"])
+
+# najdeme poruchu, která není na poslední stanici
+test_failure = None
+
+for _, f in failures.iterrows():
+    if f["machine_id"] not in [4, 8, 12]:  # poslední stanice linek
+        test_failure = f
+        break
+
+print("Testujeme poruchu:")
+print(test_failure)
+
+snapshot = df[
+    (df["line_id"] == test_failure["line_id"])
+    & (df["timestamp"] == test_failure["failure_time"])
+].sort_values("machine_id")
+
+print("\nStav linky v daný čas:")
+print(snapshot[["machine_id", "is_running", "produced_units"]])
+
+import pandas as pd
+
+failures = pd.read_csv("data/Source/failures.csv")
+
+print(failures["machine_id"].value_counts().sort_index())

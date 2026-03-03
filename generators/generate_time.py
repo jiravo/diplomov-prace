@@ -1,6 +1,8 @@
 import pandas as pd
 from config import *
 
+# SCRIPT GENERUJE ČASOVOU ŘADU SPOLEČNOU PRO VŠECHNY TABULKY A BĚH FIRMY: time, D_Time
+
 CZECH_DAYS = {
     "Monday": "Pondělí",
     "Tuesday": "Úterý",
@@ -64,7 +66,7 @@ def generate_time():
     df_time["shift_start_hour"] = shifts.apply(lambda x: x[2])
     df_time["shift_end_hour"] = shifts.apply(lambda x: x[3])
 
-    df_time.to_csv("data/Source/D_Time.csv", index=False)
-    df_time.to_csv("data/Dimenze a Faktovky/D_Time.csv", index=False)
+    df_time.to_csv("data/Source/time.csv", index=False)
+    df_time.to_csv("data/BI/D_Time.csv", index=False)
 
     return df_time
