@@ -14,6 +14,7 @@ from generators.generate_D_SpareParts import generate_D_SparePart
 from generators.generate_D_Technician import generate_D_Technician
 from generators.generate_maintenance import generate_maintenance
 from generators.generate_maintenance import add_labor_and_parts
+from generators.generate_Fact_Tables import generate_fact_tables
 
 
 np.random.seed(42)
@@ -86,6 +87,10 @@ def main():
     failures.to_csv("data/Source/failures.csv", index=False)
 
     maintenance.to_csv("data/Source/maintenance.csv", index=False)
+
+    print("Generating Fact tables...")
+
+    generate_fact_tables()
 
     print("✅ Simulation finished!")
 
