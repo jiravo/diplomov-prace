@@ -112,6 +112,9 @@ def generate_fact_tables():
     F_Maintenance["related_failure_id"] = F_Maintenance["related_failure_id"].astype(
         "Int64"
     )
+
+    F_Maintenance["part_id"] = F_Maintenance["part_id"].astype("Int64")
+
     F_Maintenance["total_cost"] = (
         F_Maintenance["labor_cost"] + F_Maintenance["parts_cost"]
     )
