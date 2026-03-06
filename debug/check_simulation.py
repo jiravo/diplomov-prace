@@ -1,7 +1,7 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 
-df = pd.read_csv("data/Source/sensor_data.csv")
+"""df = pd.read_csv("data/Source/sensor_data.csv")
 
 # timestamp MUSÍ být datetime
 df["timestamp"] = pd.to_datetime(df["timestamp"])
@@ -181,4 +181,64 @@ invalid = maintenance[
     ~maintenance["part_id"].isin(parts["part_id"]) & maintenance["part_id"].notna()
 ]
 
-print(invalid)
+print(invalid)"""
+
+import pandas as pd
+
+sensor = pd.read_csv("data/Source/sensor_data.csv", parse_dates=["timestamp"])
+failures = pd.read_csv("data/Source/failures.csv", parse_dates=["failure_time"])
+maintenance = pd.read_csv("data/Source/maintenance.csv", parse_dates=["start_time"])
+
+print("=== BASIC INFO ===")
+print(sensor.shape)
+print(failures.shape)
+print(maintenance.shape)
+
+# ------------------------------------------------
+# 1 DUPLICITY SENSOR DAT
+# ------------------------------------------------
+
+duplicates = sensor.duplicated(subset=["timestamp", "machine_id"]).sum()
+print("\nDuplicity sensor_data:", duplicates)
+
+# ------------------------------------------------
+# 2 PRODUKCE KDYŽ STROJ NEBĚŽÍ
+# ------------------------------------------------
+
+invalid_production = sensor[
+    (sensor["is_running"] == 0) & (sensor["produced_units"] > 0)
+]
+
+print("\nProduced units while machine stopped:")
+print(len(invalid_production))
+
+# ------------------------------------------------
+# 3 FAILURE TIME EXISTUJE V SENSOR DATECH
+# ------------------------------------------------
+
+missing_failure_time = failures[~failures["failure_time"].isin(sensor["timestamp"])]
+
+print("\nFailures without matching sensor timestamp:")
+print(len(missing_failure_time))
+
+# ------------------------------------------------
+# 4 NEGATIVNÍ HODNOTY SENSORŮ
+# ------------------------------------------------
+
+sensor_cols = ["temperature", "vibration", "pressure", "load"]
+
+for col in sensor_cols:
+
+    negative = sensor[sensor[col] < 0]
+
+    print(f"\nNegative values in {col}: {len(negative)}")
+
+# ------------------------------------------------
+# 5 KONTROLA HEALTH INDEX
+# ------------------------------------------------
+
+health_invalid = sensor[(sensor["health_index"] < 0) | (sensor["health_index"] > 1)]
+
+print("\nInvalid health index:", len(health_invalid))
+
+print("\n=== DATASET CHECK FINISHED ===")
