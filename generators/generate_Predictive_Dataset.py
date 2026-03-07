@@ -423,3 +423,82 @@ print(ml_df.groupby("target_failure_type")["target_RUL_hours"].mean())
 # ===============================
 
 ml_df.to_csv("data/ML/Predictive_Dataset.csv", index=False)
+
+#################################################################################################################
+
+
+print("FINÁLNÍ KONTROLA")
+
+import pandas as pd
+
+df = pd.read_csv("data/ML/Predictive_Dataset.csv", parse_dates=["timestamp"])
+
+print("Shape:", df.shape)
+
+print("\nMissing values:")
+print(df.isna().sum())
+
+print("\nDuplicate rows:", df.duplicated().sum())
+
+print("\nBasic stats:")
+print(df.describe())
+
+print(df["target_failure_72h"].value_counts())
+
+print("\nFailure type distribution:")
+print(df["target_failure_type"].value_counts())
+
+print("\nRUL stats:")
+print(df["target_RUL_hours"].describe())
+
+print(df.groupby("machine_id")["timestamp"].diff().value_counts().head())
+
+print(df[["health_index", "vibration", "temperature", "target_RUL_hours"]].corr())
+
+print(
+    df.groupby("target_failure_72h")[
+        ["vibration", "temperature", "health_index"]
+    ].mean()
+)
+
+
+print(df.groupby("target_failure_72h")["health_delta_24h"].mean())
+
+#################################################################################################################
+
+print("JEŠTĚ DALŠÍ KONTROLY PRO ML")
+
+print(df["target_failure_72h"].value_counts(normalize=True))
+
+print(df.groupby("machine_id")["target_failure_72h"].mean())
+
+print(failures.groupby("machine_id").size())
+
+###################################################################################################################
+
+"""print("TESTOVACÍ GRAF KDYBY NĚCO")
+
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# vybereme jen data před poruchou
+df_failure_window = df[(df["target_RUL_hours"] >= 0) & (df["target_RUL_hours"] <= 72)]
+
+# průměrné hodnoty senzorů podle vzdálenosti od poruchy
+trend = df_failure_window.groupby("target_RUL_hours")[["vibration", "temperature", "health_index"]].mean()
+
+# vykreslení
+plt.figure(figsize=(8,5))
+
+plt.plot(trend.index, trend["vibration"], label="Vibration")
+plt.plot(trend.index, trend["temperature"], label="Temperature")
+plt.plot(trend.index, trend["health_index"], label="Health index")
+
+plt.gca().invert_xaxis()
+
+plt.xlabel("Hours before failure")
+plt.ylabel("Sensor value")
+plt.title("Sensor trends before failure")
+
+plt.legend()
+plt.show()"""
